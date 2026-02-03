@@ -22,8 +22,8 @@ export default function VoiceOrb() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const localAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
-  const localDataArrayRef = useRef<Uint8Array | null>(null);
-  const remoteDataArrayRef = useRef<Uint8Array | null>(null);
+  const localDataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const remoteDataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const smoothedAmplitudeRef = useRef(0);
   const materialRef = useRef<any>(null);
   const particlesRef = useRef<any>(null);
@@ -79,7 +79,7 @@ export default function VoiceOrb() {
     const audioEl = track.attach() as HTMLAudioElement;
     audioEl.style.display = "none";
     audioEl.autoplay = true;
-    audioEl.playsInline = true;
+    audioEl.setAttribute("playsinline", "true");
     document.body.appendChild(audioEl);
     
     // Explicitly play (needed for Chrome)

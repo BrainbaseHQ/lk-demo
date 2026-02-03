@@ -556,6 +556,21 @@ export default function VoiceOrb() {
       const newMutedState = !isMicMuted;
       await roomRef.current.localParticipant.setMicrophoneEnabled(!newMutedState);
       setIsMicMuted(newMutedState);
+      
+      // Re-setup local analyser when unmuting (track might have changed)
+      if (!newMutedState) {
+        // Small delay to let the track initialize
+        setTimeout(() => {
+          if (roomRef.current) {
+            const localTracks = roomRef.current.localParticipant.audioTrackPublications;
+            localTracks.forEach((pub) => {
+              if (pub.track) {
+                setupLocalAudioAnalyser(pub.track);
+              }
+            });
+          }
+        }, 100);
+      }
     }
   };
 

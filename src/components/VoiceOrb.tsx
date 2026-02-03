@@ -54,17 +54,26 @@ export default function VoiceOrb() {
     return smoothedAmplitudeRef.current;
   }, []);
 
-  const setupLocalAudioAnalyser = (track: any) => {
+  const setupLocalAudioAnalyser = async (track: any) => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
 
-    const mediaStream = new MediaStream([track.mediaStreamTrack]);
-    const source = audioContextRef.current.createMediaStreamSource(mediaStream);
-    localAnalyserRef.current = audioContextRef.current.createAnalyser();
-    localAnalyserRef.current.fftSize = 256;
-    source.connect(localAnalyserRef.current);
-    localDataArrayRef.current = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
+    // Resume audio context if suspended
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume();
+    }
+
+    try {
+      const mediaStream = new MediaStream([track.mediaStreamTrack]);
+      const source = audioContextRef.current.createMediaStreamSource(mediaStream);
+      localAnalyserRef.current = audioContextRef.current.createAnalyser();
+      localAnalyserRef.current.fftSize = 256;
+      source.connect(localAnalyserRef.current);
+      localDataArrayRef.current = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
+    } catch (e) {
+      console.error("Failed to set up local audio analyser:", e);
+    }
   };
 
   const setupRemoteAudioAnalyser = async (track: any) => {
@@ -473,6 +482,13 @@ export default function VoiceOrb() {
         if (track.kind === Track.Kind.Audio) {
           setupRemoteAudioAnalyser(track);
           setStatus("");
+        }
+      });
+
+      // Listen for local track published to set up analyser
+      room.on(RoomEvent.LocalTrackPublished, (publication) => {
+        if (publication.track && publication.track.kind === Track.Kind.Audio) {
+          setupLocalAudioAnalyser(publication.track);
         }
       });
 

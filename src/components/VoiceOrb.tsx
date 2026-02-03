@@ -28,6 +28,8 @@ export default function VoiceOrb() {
   const materialRef = useRef<any>(null);
   const particlesRef = useRef<any>(null);
   const sceneInitializedRef = useRef(false);
+  const morphTargetRef = useRef(0); // 0 = torus, 1 = sphere
+  const currentMorphRef = useRef(0);
 
 
   const getAmplitude = useCallback(() => {
@@ -138,21 +140,44 @@ export default function VoiceOrb() {
 
         camera.position.z = 300;
 
-        // Particle system
-        const particleCount = 10000;
+        // Particle system - Torus (donut) shape
+        const particleCount = 15000;
         const positions = new Float32Array(particleCount * 3);
         const colors = new Float32Array(particleCount * 3);
         const sizes = new Float32Array(particleCount);
 
-        const maxRadius = 100;
+        // Store both torus and sphere positions for morphing
+        const torusPositions = new Float32Array(particleCount * 3);
+        const spherePositions = new Float32Array(particleCount * 3);
+        
+        // Torus parameters
+        const torusRadius = 70;
+        const tubeRadius = 30;
+        const sphereRadius = 80;
+        
         for (let i = 0; i < particleCount; i++) {
-          const radius = maxRadius * Math.cbrt(Math.random());
-          const theta = Math.random() * Math.PI * 2;
-          const phi = Math.acos(Math.random() * 2 - 1);
-
-          positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-          positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-          positions[i * 3 + 2] = radius * Math.cos(phi);
+          // Torus position
+          const u = Math.random() * Math.PI * 2;
+          const v = Math.random() * Math.PI * 2;
+          const r = tubeRadius * Math.sqrt(Math.random());
+          
+          torusPositions[i * 3] = (torusRadius + r * Math.cos(v)) * Math.cos(u);
+          torusPositions[i * 3 + 1] = (torusRadius + r * Math.cos(v)) * Math.sin(u);
+          torusPositions[i * 3 + 2] = r * Math.sin(v);
+          
+          // Sphere position (same particle, different shape)
+          const sRadius = sphereRadius * Math.cbrt(Math.random());
+          const sTheta = Math.random() * Math.PI * 2;
+          const sPhi = Math.acos(Math.random() * 2 - 1);
+          
+          spherePositions[i * 3] = sRadius * Math.sin(sPhi) * Math.cos(sTheta);
+          spherePositions[i * 3 + 1] = sRadius * Math.sin(sPhi) * Math.sin(sTheta);
+          spherePositions[i * 3 + 2] = sRadius * Math.cos(sPhi);
+          
+          // Start with torus
+          positions[i * 3] = torusPositions[i * 3];
+          positions[i * 3 + 1] = torusPositions[i * 3 + 1];
+          positions[i * 3 + 2] = torusPositions[i * 3 + 2];
 
           const brightness = 0.8 + Math.random() * 0.2;
           colors[i * 3] = brightness;
@@ -164,6 +189,8 @@ export default function VoiceOrb() {
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute("torusPos", new THREE.BufferAttribute(torusPositions, 3));
+        geometry.setAttribute("spherePos", new THREE.BufferAttribute(spherePositions, 3));
         geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
         geometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
 
@@ -180,6 +207,8 @@ export default function VoiceOrb() {
           vertexShader: `
             attribute float size;
             attribute vec3 color;
+            attribute vec3 torusPos;
+            attribute vec3 spherePos;
             varying vec3 vColor;
             uniform float time;
             uniform vec3 mouse;
@@ -213,11 +242,13 @@ export default function VoiceOrb() {
               vec3 connectedColor = color; // White
               vColor = mix(disconnectedColor, connectedColor, isConnected);
               
-              vec3 pos = position;
+              // Morph between torus (disconnected) and sphere (connected)
+              vec3 basePos = mix(torusPos, spherePos, isConnected);
+              vec3 pos = basePos;
               
-              float distFromCenter = length(position);
-              vec3 dirFromCenter = normalize(position);
-              float audioNoise = noise(position * 0.02 + time * 2.0);
+              float distFromCenter = length(basePos);
+              vec3 dirFromCenter = normalize(basePos);
+              float audioNoise = noise(basePos * 0.02 + time * 2.0);
               float expansion = audioAmplitude * audioExpansion * (0.5 + audioNoise);
               pos += dirFromCenter * expansion;
               
@@ -229,7 +260,7 @@ export default function VoiceOrb() {
               vec3 toMouse = pos - mouse;
               float dist = length(toMouse);
               
-              float noiseVal = noise(position * 0.05 + time * 0.5);
+              float noiseVal = noise(basePos * 0.05 + time * 0.5);
               float featheredRadius = hoverRadius * (0.6 + noiseVal * 0.8);
               
               if (dist < featheredRadius && dist > 0.0) {
@@ -237,17 +268,35 @@ export default function VoiceOrb() {
                 float falloff = 1.0 - smoothstep(0.0, featheredRadius, dist);
                 falloff = pow(falloff, 0.5);
                 
-                float angleNoise = noise(position * 0.1 + time) * 2.0 - 1.0;
+                float angleNoise = noise(basePos * 0.1 + time) * 2.0 - 1.0;
                 pushDir.x += angleNoise * 0.3;
-                pushDir.y += noise(position * 0.1 - time) * 0.3 - 0.15;
+                pushDir.y += noise(basePos * 0.1 - time) * 0.3 - 0.15;
                 pushDir = normalize(pushDir);
                 
                 float pushAmount = falloff * hoverStrength * (0.7 + noiseVal * 0.6);
                 pos += pushDir * pushAmount;
               }
               
-              pos.x += sin(time * 0.5 + position.y * 0.01) * 2.0;
-              pos.y += cos(time * 0.5 + position.x * 0.01) * 2.0;
+              // Flowing movement - different for torus vs sphere
+              float flowSpeed = 0.3;
+              float swirl = time * flowSpeed;
+              
+              // Calculate angle for flow
+              float angle = atan(basePos.z, basePos.x);
+              float flowOffset = sin(swirl + angle * 2.0) * 4.0;
+              
+              // Torus: particles flow around the ring
+              // Sphere: particles have gentle ambient motion
+              float torusFlow = 1.0 - isConnected;
+              
+              pos.x += sin(time * 0.5 + basePos.y * 0.02 + angle) * 3.0 * torusFlow;
+              pos.z += cos(time * 0.5 + basePos.y * 0.02 + angle) * 3.0 * torusFlow;
+              pos.y += flowOffset * torusFlow;
+              
+              // Add turbulent motion (both states)
+              pos.x += sin(time * 0.8 + basePos.y * 0.05) * 2.0;
+              pos.y += cos(time * 0.6 + basePos.x * 0.03) * 2.0;
+              pos.z += sin(time * 0.7 + basePos.z * 0.04) * 2.0;
               
               vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
               float sizeBoost = 1.0 + audioAmplitude * 0.5;
@@ -323,9 +372,11 @@ export default function VoiceOrb() {
           const amplitude = getAmplitude();
           material.uniforms.audioAmplitude.value = amplitude;
 
-          const rotationSpeed = 0.002 * (1 - amplitude * 0.5);
-          particles.rotation.y += rotationSpeed;
-          particles.rotation.x += rotationSpeed * 0.5;
+          // Smooth morph transition
+          currentMorphRef.current += (morphTargetRef.current - currentMorphRef.current) * 0.05;
+          material.uniforms.isConnected.value = currentMorphRef.current;
+
+          // No rotation - particles move internally via shader
 
           particles.updateMatrixWorld();
           renderer.render(scene, camera);
@@ -390,9 +441,7 @@ export default function VoiceOrb() {
         setStatus("");
         setIsConnected(true);
         setIsConnecting(false);
-        if (materialRef.current) {
-          materialRef.current.uniforms.isConnected.value = 1.0;
-        }
+        morphTargetRef.current = 1.0; // Morph to sphere
       });
 
       room.on(RoomEvent.Disconnected, () => {
@@ -412,9 +461,7 @@ export default function VoiceOrb() {
         localDataArrayRef.current = null;
         remoteDataArrayRef.current = null;
         smoothedAmplitudeRef.current = 0;
-        if (materialRef.current) {
-          materialRef.current.uniforms.isConnected.value = 0.0;
-        }
+        morphTargetRef.current = 0.0; // Morph back to torus
       });
 
       room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -474,9 +521,7 @@ export default function VoiceOrb() {
     
     setIsConnected(false);
     setStatus("");
-    if (materialRef.current) {
-      materialRef.current.uniforms.isConnected.value = 0.0;
-    }
+    morphTargetRef.current = 0.0; // Morph back to torus
   };
 
   const handleOrbClick = () => {

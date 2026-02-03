@@ -7,6 +7,13 @@ import { RoomConfiguration } from "@livekit/protocol";
 const apiKey = process.env.LIVEKIT_API_KEY;
 const apiSecret = process.env.LIVEKIT_API_SECRET;
 
+// CORS headers helper
+function setCorsHeaders(res: NextApiResponse) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
 type TokenRequest = {
   room_name: string;
   participant_identity: string;
@@ -60,8 +67,17 @@ export default async function handleToken(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
+  // Handle CORS
+  setCorsHeaders(res);
+  
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
+  }
+  
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+    res.setHeader("Allow", "POST, OPTIONS");
     res.status(405).end("Method Not Allowed");
     return;
   }

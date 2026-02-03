@@ -33,7 +33,7 @@ import {
 import { PartialMessage } from "@bufbuild/protobuf";
 import { QRCodeSVG } from "qrcode.react";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import tailwindTheme from "../../lib/tailwindTheme.preval";
+import tailwindTheme from "../../lib/tailwindTheme";
 import { EditableNameValueRow } from "@/components/config/NameValueRow";
 import { AttributesInspector } from "@/components/config/AttributesInspector";
 import { RpcPanel } from "./RpcPanel";

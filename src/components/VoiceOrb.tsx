@@ -396,6 +396,14 @@ export default function VoiceOrb() {
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        // Clean up audio elements
+        const audioElements = document.querySelectorAll('audio');
+        audioElements.forEach(el => {
+          el.pause();
+          el.srcObject = null;
+          el.remove();
+        });
+        
         setStatus("");
         setIsConnected(false);
         setIsConnecting(false);
@@ -436,11 +444,34 @@ export default function VoiceOrb() {
     }
   };
 
-  const disconnect = () => {
+  const disconnect = async () => {
     if (roomRef.current) {
-      roomRef.current.disconnect();
+      // Disable mic first
+      try {
+        await roomRef.current.localParticipant.setMicrophoneEnabled(false);
+      } catch (e) {
+        // Ignore errors
+      }
+      // Properly disconnect and clean up
+      roomRef.current.disconnect(true); // true = stop all tracks
       roomRef.current = null;
     }
+    
+    // Clean up audio elements
+    const audioElements = document.querySelectorAll('audio');
+    audioElements.forEach(el => {
+      el.pause();
+      el.srcObject = null;
+      el.remove();
+    });
+    
+    // Reset analysers
+    localAnalyserRef.current = null;
+    remoteAnalyserRef.current = null;
+    localDataArrayRef.current = null;
+    remoteDataArrayRef.current = null;
+    smoothedAmplitudeRef.current = 0;
+    
     setIsConnected(false);
     setStatus("");
     if (materialRef.current) {

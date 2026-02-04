@@ -16,7 +16,16 @@ export default function VoiceOrb() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
+  const [showOrb, setShowOrb] = useState(false);
   const agentName = "voice-agent";
+  
+  // Fade in orb after 1 second
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowOrb(true);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
   
   const roomRef = useRef<Room | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -151,7 +160,7 @@ export default function VoiceOrb() {
         camera.position.z = 300;
 
         // Particle system - Torus (donut) shape
-        const particleCount = 15000;
+        const particleCount = 5000;
         const positions = new Float32Array(particleCount * 3);
         const colors = new Float32Array(particleCount * 3);
         const sizes = new Float32Array(particleCount);
@@ -160,10 +169,10 @@ export default function VoiceOrb() {
         const torusPositions = new Float32Array(particleCount * 3);
         const spherePositions = new Float32Array(particleCount * 3);
         
-        // Torus parameters
-        const torusRadius = 70;
-        const tubeRadius = 30;
-        const sphereRadius = 80;
+        // Torus parameters (smaller size)
+        const torusRadius = 45;
+        const tubeRadius = 18;
+        const sphereRadius = 50;
         
         for (let i = 0; i < particleCount; i++) {
           // Torus position
@@ -493,7 +502,12 @@ export default function VoiceOrb() {
       });
 
       await room.connect(data.server_url, data.participant_token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      
+      // Try to enable mic, but don't fail if permission denied
+      room.localParticipant.setMicrophoneEnabled(true).catch((micError: any) => {
+        console.warn("Microphone not available:", micError.message);
+        // Don't show error - just continue without mic
+      });
 
       const localTracks = room.localParticipant.audioTrackPublications;
       localTracks.forEach((pub) => {
@@ -553,29 +567,45 @@ export default function VoiceOrb() {
   const toggleMic = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent orb click
     if (roomRef.current) {
-      const newMutedState = !isMicMuted;
-      await roomRef.current.localParticipant.setMicrophoneEnabled(!newMutedState);
-      setIsMicMuted(newMutedState);
-      
-      // Re-setup local analyser when unmuting (track might have changed)
-      if (!newMutedState) {
-        // Small delay to let the track initialize
-        setTimeout(() => {
-          if (roomRef.current) {
-            const localTracks = roomRef.current.localParticipant.audioTrackPublications;
-            localTracks.forEach((pub) => {
-              if (pub.track) {
-                setupLocalAudioAnalyser(pub.track);
-              }
-            });
-          }
-        }, 100);
+      try {
+        const newMutedState = !isMicMuted;
+        await roomRef.current.localParticipant.setMicrophoneEnabled(!newMutedState);
+        setIsMicMuted(newMutedState);
+        
+        // Re-setup local analyser when unmuting (track might have changed)
+        if (!newMutedState) {
+          // Small delay to let the track initialize
+          setTimeout(() => {
+            if (roomRef.current) {
+              const localTracks = roomRef.current.localParticipant.audioTrackPublications;
+              localTracks.forEach((pub) => {
+                if (pub.track) {
+                  setupLocalAudioAnalyser(pub.track);
+                }
+              });
+            }
+          }, 100);
+        }
+      } catch (error: any) {
+        console.error("Mic toggle error:", error);
+        if (error.name === 'NotAllowedError') {
+          setStatus("Microphone access denied");
+        }
       }
     }
   };
 
   return (
     <div className="fixed inset-0 bg-[#0a0a0f]">
+      {/* Spline 3D Background - lazy loaded */}
+      <iframe
+        src="https://my.spline.design/nexbotrobotcharacterconcept-QZcZ4Aa8MdtIGPDRiz3fvy6E/"
+        frameBorder="0"
+        loading="lazy"
+        className="fixed inset-0 w-full h-full"
+        style={{ zIndex: -1 }}
+      />
+      
       {/* Status */}
       {status && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm z-50">
@@ -607,12 +637,24 @@ export default function VoiceOrb() {
         </button>
       )}
 
-      {/* Clickable overlay for orb */}
+      {/* Particles canvas - above Spline but doesn't block mouse */}
       <div
         ref={containerRef}
-        className="w-full h-full cursor-pointer"
-        onClick={handleOrbClick}
+        className="w-full h-full transition-opacity duration-1000 ease-out"
+        style={{ 
+          pointerEvents: 'none', 
+          zIndex: 10,
+          opacity: showOrb ? 1 : 0
+        }}
       />
+      
+      {/* Clickable orb area in center */}
+      <div
+        onClick={handleOrbClick}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full cursor-pointer z-20"
+        title={isConnected ? 'Click to disconnect' : 'Click to connect'}
+      />
+      
     </div>
   );
 }

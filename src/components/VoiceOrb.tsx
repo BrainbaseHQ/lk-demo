@@ -17,7 +17,8 @@ export default function VoiceOrb() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [showOrb, setShowOrb] = useState(false);
-  const agentName = "voice-agent";
+  const [agentName, setAgentName] = useState("voice-agent");
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   
   // Fade in orb after 1 second
   useEffect(() => {
@@ -606,6 +607,33 @@ export default function VoiceOrb() {
         style={{ zIndex: -1 }}
       />
       
+      {/* Agent selector - invisible button top right */}
+      <div className="fixed top-4 right-4 z-50">
+        <button
+          onClick={() => !isConnected && setShowAgentDropdown(!showAgentDropdown)}
+          className="w-8 h-8 rounded opacity-0 hover:opacity-10 hover:bg-white transition-opacity"
+          disabled={isConnected}
+        />
+        {showAgentDropdown && !isConnected && (
+          <div className="absolute top-10 right-0 bg-black/80 border border-white/20 rounded-full overflow-hidden flex">
+            {["voice-agent", "voice-agent-dev"].map((name) => (
+              <button
+                key={name}
+                onClick={() => {
+                  setAgentName(name);
+                  setShowAgentDropdown(false);
+                }}
+                className={`px-4 py-2 text-xs whitespace-nowrap hover:bg-white/10 transition-colors ${
+                  agentName === name ? "text-white bg-white/10" : "text-white/60"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Status */}
       {status && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm z-50">
